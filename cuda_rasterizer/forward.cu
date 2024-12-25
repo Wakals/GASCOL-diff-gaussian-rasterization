@@ -160,6 +160,7 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	const glm::vec4* rotations,
 	const float* opacities,
 	const float* shs,
+	const float* class_feature,
 	bool* clamped,
 	const float* cov3D_precomp,
 	const float* colors_precomp,
@@ -174,6 +175,7 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	float* depths,
 	float* cov3Ds,
 	float* rgb,
+	float* class_p,
 	float4* conic_opacity,
 	const dim3 grid,
 	uint32_t* tiles_touched,
@@ -246,6 +248,9 @@ __global__ void preprocessCUDA(int P, int D, int M,
 		rgb[idx * C + 2] = result.z;
 	}
 
+	class_p[idx * 2 + 0] = class_feature[idx * 2 + 0];
+	class_p[idx * 2 + 1] = class_feature[idx * 2 + 1];
+
 	// Store some useful helper data for the next steps.
 	depths[idx] = p_view.z;
 	radii[idx] = my_radius;
@@ -266,12 +271,14 @@ renderCUDA(
 	int W, int H,
 	const float2* __restrict__ points_xy_image,
 	const float* __restrict__ features,
+	const float* __restrict__ class_p,
 	const float* __restrict__ depths,
 	const float4* __restrict__ conic_opacity,
 	float* __restrict__ out_alpha,
 	uint32_t* __restrict__ n_contrib,
 	const float* __restrict__ bg_color,
 	float* __restrict__ out_color,
+	float* __restrict__ out_class_p,
 	float* __restrict__ out_depth)
 {
 	// Identify current tile and associated min/max pixel range.
@@ -303,6 +310,7 @@ renderCUDA(
 	uint32_t contributor = 0;
 	uint32_t last_contributor = 0;
 	float C[CHANNELS] = { 0 };
+	float SP[2] = { 0 };
 	float weight = 0;
 	float D = 0;
 
@@ -357,6 +365,10 @@ renderCUDA(
 			// Eq. (3) from 3D Gaussian splatting paper.
 			for (int ch = 0; ch < CHANNELS; ch++)
 				C[ch] += features[collected_id[j] * CHANNELS + ch] * alpha * T;
+			for (int ch = 0; ch < 2; ch++)
+				SP[ch] += class_p[collected_id[j] * 2 + ch] * alpha * T;
+				// print the SP value
+			// printf("SP: %f\n", SP[0]);
 			weight += alpha * T;
 			D += depths[collected_id[j]] * alpha * T;
 
@@ -375,6 +387,8 @@ renderCUDA(
 		n_contrib[pix_id] = last_contributor;
 		for (int ch = 0; ch < CHANNELS; ch++)
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
+		for (int ch = 0; ch < 2; ch++)
+			out_class_p[ch * H * W + pix_id] = SP[ch];
 		out_alpha[pix_id] = weight; //1 - T;
 		out_depth[pix_id] = D;
 	}
@@ -387,12 +401,14 @@ void FORWARD::render(
 	int W, int H,
 	const float2* means2D,
 	const float* colors,
+	const float* class_p,
 	const float* depths,
 	const float4* conic_opacity,
 	float* out_alpha,
 	uint32_t* n_contrib,
 	const float* bg_color,
 	float* out_color,
+	float* out_class_p,
 	float* out_depth)
 {
 	renderCUDA<NUM_CHANNELS> << <grid, block >> > (
@@ -401,12 +417,14 @@ void FORWARD::render(
 		W, H,
 		means2D,
 		colors,
+		class_p,
 		depths,
 		conic_opacity,
 		out_alpha,
 		n_contrib,
 		bg_color,
 		out_color,
+		out_class_p,
 		out_depth);
 }
 
@@ -417,6 +435,7 @@ void FORWARD::preprocess(int P, int D, int M,
 	const glm::vec4* rotations,
 	const float* opacities,
 	const float* shs,
+	const float* class_feature,
 	bool* clamped,
 	const float* cov3D_precomp,
 	const float* colors_precomp,
@@ -431,6 +450,7 @@ void FORWARD::preprocess(int P, int D, int M,
 	float* depths,
 	float* cov3Ds,
 	float* rgb,
+	float* class_p,
 	float4* conic_opacity,
 	const dim3 grid,
 	uint32_t* tiles_touched,
@@ -444,6 +464,7 @@ void FORWARD::preprocess(int P, int D, int M,
 		rotations,
 		opacities,
 		shs,
+		class_feature,
 		clamped,
 		cov3D_precomp,
 		colors_precomp,
@@ -458,6 +479,7 @@ void FORWARD::preprocess(int P, int D, int M,
 		depths,
 		cov3Ds,
 		rgb,
+		class_p,
 		conic_opacity,
 		grid,
 		tiles_touched,

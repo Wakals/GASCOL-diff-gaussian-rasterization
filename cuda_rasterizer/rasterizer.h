@@ -37,6 +37,7 @@ namespace CudaRasterizer
 			const int width, int height,
 			const float* means3D,
 			const float* shs,
+			const float* class_feature,
 			const float* colors_precomp,
 			const float* opacities,
 			const float* scales,
@@ -52,6 +53,7 @@ namespace CudaRasterizer
 			float* out_depth,
 			float* out_alpha,
 			int* radii = nullptr,
+			float* out_class_p = nullptr,
 			bool debug = false);
 
 		static void backward(
@@ -75,6 +77,7 @@ namespace CudaRasterizer
 			char* binning_buffer,
 			char* image_buffer,
 			const float* dL_dpix,
+			const float* dL_dpix_class_p,
 			const float* dL_dpix_depth,
 			const float* dL_dalphas,
 			float* dL_dmean2D,
@@ -85,6 +88,7 @@ namespace CudaRasterizer
 			float* dL_dmean3D,
 			float* dL_dcov3D,
 			float* dL_dsh,
+			float* dL_dclass_feature,
 			float* dL_dscale,
 			float* dL_drot,
 			bool debug);
